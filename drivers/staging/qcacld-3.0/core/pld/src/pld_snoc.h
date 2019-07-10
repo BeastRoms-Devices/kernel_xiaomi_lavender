@@ -113,16 +113,15 @@ static inline int pld_snoc_is_qmi_disable(struct device *dev)
 {
 	return 0;
 }
-
-static inline int pld_snoc_is_fw_down(struct device *dev)
-{
-	return 0;
-}
-static inline int pld_snoc_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
+static inline int pld_snoc_is_fw_down(void)
 {
 	return 0;
 }
 static inline int pld_snoc_force_assert_target(struct device *dev)
+{
+	return 0;
+}
+static inline int pld_snoc_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 {
 	return 0;
 }
@@ -131,10 +130,10 @@ static inline int pld_snoc_is_fw_rejuvenate(void)
 {
 	return 0;
 }
+
 static inline void pld_snoc_block_shutdown(bool status)
 {
 }
-
 #else
 int pld_snoc_register_driver(void);
 void pld_snoc_unregister_driver(void);
@@ -228,7 +227,7 @@ unsigned int pld_snoc_socinfo_get_serial_number(struct device *dev)
 	return icnss_socinfo_get_serial_number(dev);
 }
 
-static inline int pld_snoc_is_fw_down(struct device *dev)
+static inline int pld_snoc_is_fw_down(void)
 {
 	return icnss_is_fw_down();
 }
@@ -258,10 +257,10 @@ static inline int pld_snoc_is_fw_rejuvenate(void)
 {
 	return icnss_is_rejuvenate();
 }
+
 static inline void pld_snoc_block_shutdown(bool status)
 {
 	icnss_block_shutdown(status);
 }
-
 #endif
 #endif

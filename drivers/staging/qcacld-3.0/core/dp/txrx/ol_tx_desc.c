@@ -80,19 +80,6 @@ static inline void ol_tx_desc_reset_timestamp(struct ol_tx_desc_t *tx_desc)
 }
 #endif
 
-#ifdef DESC_TIMESTAMP_DEBUG_INFO
-static inline void ol_tx_desc_update_tx_ts(struct ol_tx_desc_t *tx_desc)
-{
-	tx_desc->desc_debug_info.prev_tx_ts = tx_desc
-						->desc_debug_info.curr_tx_ts;
-	tx_desc->desc_debug_info.curr_tx_ts = qdf_get_log_timestamp();
-}
-#else
-static inline void ol_tx_desc_update_tx_ts(struct ol_tx_desc_t *tx_desc)
-{
-}
-#endif
-
 /**
  * ol_tx_desc_vdev_update() - vedv assign.
  * @tx_desc: tx descriptor pointer
@@ -157,7 +144,6 @@ struct ol_tx_desc_t *ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev,
 		ol_tx_desc_compute_delay(tx_desc);
 		ol_tx_desc_vdev_update(tx_desc, vdev);
 		ol_tx_desc_count_inc(vdev);
-		ol_tx_desc_update_tx_ts(tx_desc);
 		qdf_atomic_inc(&tx_desc->ref_cnt);
 	}
 	qdf_spin_unlock_bh(&pdev->tx_mutex);
@@ -196,46 +182,45 @@ struct ol_tx_desc_t *ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev,
 {
 	struct ol_tx_desc_t *tx_desc = NULL;
 
-	if (!pool) {
-		pdev->pool_stats.pkt_drop_no_pool++;
-		goto end;
-	}
-
-	qdf_spin_lock_bh(&pool->flow_pool_lock);
-	if (pool->avail_desc) {
-		tx_desc = ol_tx_get_desc_flow_pool(pool);
-		ol_tx_desc_dup_detect_set(pdev, tx_desc);
-		if (qdf_unlikely(pool->avail_desc < pool->stop_th &&
-				(pool->avail_desc >= pool->stop_priority_th) &&
-				(pool->status == FLOW_POOL_ACTIVE_UNPAUSED))) {
-			pool->status = FLOW_POOL_NON_PRIO_PAUSED;
-			/* pause network NON PRIORITY queues */
-			pdev->pause_cb(vdev->vdev_id,
-				       WLAN_STOP_NON_PRIORITY_QUEUE,
-				       WLAN_DATA_FLOW_CONTROL);
-		} else if (qdf_unlikely((pool->avail_desc <
-						pool->stop_priority_th) &&
-				pool->status == FLOW_POOL_NON_PRIO_PAUSED)) {
-			pool->status = FLOW_POOL_ACTIVE_PAUSED;
-			/* pause priority queue */
-			pdev->pause_cb(vdev->vdev_id,
-				       WLAN_NETIF_PRIORITY_QUEUE_OFF,
-				       WLAN_DATA_FLOW_CONTROL_PRIORITY);
+	if (pool) {
+		qdf_spin_lock_bh(&pool->flow_pool_lock);
+		if (pool->avail_desc) {
+			tx_desc = ol_tx_get_desc_flow_pool(pool);
+			ol_tx_desc_dup_detect_set(pdev, tx_desc);
+			if (qdf_unlikely(pool->avail_desc < pool->stop_th)
+				&& (pool->status != FLOW_POOL_ACTIVE_PAUSED)) {
+				pool->status = FLOW_POOL_ACTIVE_PAUSED;
+				/* pause network queues */
+				pdev->pause_cb(vdev->vdev_id,
+					       WLAN_STOP_ALL_NETIF_QUEUE,
+					       WLAN_DATA_FLOW_CONTROL);
+				/* unpause priority queue */
+				pdev->pause_cb(vdev->vdev_id,
+					       WLAN_NETIF_PRIORITY_QUEUE_ON,
+					       WLAN_DATA_FLOW_CONTROL_PRIORITY);
+				qdf_spin_unlock_bh(&pool->flow_pool_lock);
+			} else if (qdf_unlikely(pool->avail_desc <
+						pool->stop_priority_th)) {
+				/* pause priority queue */
+				pdev->pause_cb(vdev->vdev_id,
+					       WLAN_NETIF_PRIORITY_QUEUE_OFF,
+					       WLAN_DATA_FLOW_CONTROL_PRIORITY);
+				qdf_spin_unlock_bh(&pool->flow_pool_lock);
+			} else {
+				qdf_spin_unlock_bh(&pool->flow_pool_lock);
+			}
+			ol_tx_desc_sanity_checks(pdev, tx_desc);
+			ol_tx_desc_compute_delay(tx_desc);
+			ol_tx_desc_vdev_update(tx_desc, vdev);
+			qdf_atomic_inc(&tx_desc->ref_cnt);
+		} else {
+			pool->pkt_drop_no_desc++;
+			qdf_spin_unlock_bh(&pool->flow_pool_lock);
 		}
-
-		qdf_spin_unlock_bh(&pool->flow_pool_lock);
-
-		ol_tx_desc_sanity_checks(pdev, tx_desc);
-		ol_tx_desc_compute_delay(tx_desc);
-		ol_tx_desc_update_tx_ts(tx_desc);
-		ol_tx_desc_vdev_update(tx_desc, vdev);
-		qdf_atomic_inc(&tx_desc->ref_cnt);
 	} else {
-		pool->pkt_drop_no_desc++;
-		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+		pdev->pool_stats.pkt_drop_no_pool++;
 	}
 
-end:
 	return tx_desc;
 }
 
@@ -334,7 +319,7 @@ ol_tx_desc_vdev_rm(struct ol_tx_desc_t *tx_desc)
  * Return: None
  */
 static void ol_tso_unmap_tso_segment(struct ol_txrx_pdev_t *pdev,
-						struct ol_tx_desc_t *tx_desc)
+				     struct ol_tx_desc_t *tx_desc)
 {
 	bool is_last_seg = false;
 	struct qdf_tso_num_seg_elem_t *tso_num_desc = NULL;
@@ -395,16 +380,16 @@ static void ol_tx_tso_desc_free(struct ol_txrx_pdev_t *pdev,
 }
 
 #else
+static void ol_tso_unmap_tso_segment(struct ol_txrx_pdev_t *pdev,
+				     struct ol_tx_desc_t *tx_desc)
+{
+}
+
 static inline void ol_tx_tso_desc_free(struct ol_txrx_pdev_t *pdev,
 				       struct ol_tx_desc_t *tx_desc)
 {
 }
 
-static inline void ol_tso_unmap_tso_segment(
-					struct ol_txrx_pdev_t *pdev,
-					struct ol_tx_desc_t *tx_desc)
-{
-}
 #endif
 
 /**
@@ -418,7 +403,7 @@ static inline void ol_tso_unmap_tso_segment(
  * Return: None
  */
 static void ol_tx_desc_free_common(struct ol_txrx_pdev_t *pdev,
-						struct ol_tx_desc_t *tx_desc)
+				   struct ol_tx_desc_t *tx_desc)
 {
 	ol_tx_desc_dup_detect_reset(pdev, tx_desc);
 
@@ -430,6 +415,7 @@ static void ol_tx_desc_free_common(struct ol_txrx_pdev_t *pdev,
 	/* clear the ref cnt */
 	qdf_atomic_init(&tx_desc->ref_cnt);
 	tx_desc->vdev_id = OL_TXRX_INVALID_VDEV_ID;
+	tx_desc->notify_tx_comp = 0;
 }
 
 #ifndef QCA_LL_TX_FLOW_CONTROL_V2
@@ -453,40 +439,6 @@ void ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 }
 
 #else
-
-/**
- * ol_tx_update_free_desc_to_pool() - update free desc to pool
- * @pdev: pdev handle
- * @tx_desc: descriptor
- *
- * Return : 1 desc distribution required / 0 don't need distribution
- */
-#ifdef QCA_LL_TX_FLOW_CONTROL_RESIZE
-static inline bool ol_tx_update_free_desc_to_pool(struct ol_txrx_pdev_t *pdev,
-						  struct ol_tx_desc_t *tx_desc)
-{
-	struct ol_tx_flow_pool_t *pool = tx_desc->pool;
-	bool distribute_desc = false;
-
-	if (unlikely(pool->overflow_desc)) {
-		ol_tx_put_desc_global_pool(pdev, tx_desc);
-		--pool->overflow_desc;
-		distribute_desc = true;
-	} else {
-		ol_tx_put_desc_flow_pool(pool, tx_desc);
-	}
-
-	return distribute_desc;
-}
-#else
-static inline bool ol_tx_update_free_desc_to_pool(struct ol_txrx_pdev_t *pdev,
-						  struct ol_tx_desc_t *tx_desc)
-{
-	ol_tx_put_desc_flow_pool(tx_desc->pool, tx_desc);
-	return false;
-}
-#endif
-
 /**
  * ol_tx_desc_free() - put descriptor to pool freelist
  * @pdev: pdev handle
@@ -496,28 +448,21 @@ static inline bool ol_tx_update_free_desc_to_pool(struct ol_txrx_pdev_t *pdev,
  */
 void ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 {
-	bool distribute_desc = false;
 	struct ol_tx_flow_pool_t *pool = tx_desc->pool;
 
 	qdf_spin_lock_bh(&pool->flow_pool_lock);
 
 	ol_tx_desc_free_common(pdev, tx_desc);
-	distribute_desc = ol_tx_update_free_desc_to_pool(pdev, tx_desc);
-
+	ol_tx_put_desc_flow_pool(pool, tx_desc);
 	switch (pool->status) {
 	case FLOW_POOL_ACTIVE_PAUSED:
-		if (pool->avail_desc > pool->start_priority_th) {
+		if (pool->avail_desc > pool->start_th) {
 			/* unpause priority queue */
 			pdev->pause_cb(pool->member_flow_id,
-			       WLAN_NETIF_PRIORITY_QUEUE_ON,
-			       WLAN_DATA_FLOW_CONTROL_PRIORITY);
-			pool->status = FLOW_POOL_NON_PRIO_PAUSED;
-		}
-		break;
-	case FLOW_POOL_NON_PRIO_PAUSED:
-		if (pool->avail_desc > pool->start_th) {
+				       WLAN_NETIF_PRIORITY_QUEUE_ON,
+				       WLAN_DATA_FLOW_CONTROL_PRIORITY);
 			pdev->pause_cb(pool->member_flow_id,
-				       WLAN_WAKE_NON_PRIORITY_QUEUE,
+				       WLAN_WAKE_ALL_NETIF_QUEUE,
 				       WLAN_DATA_FLOW_CONTROL);
 			pool->status = FLOW_POOL_ACTIVE_UNPAUSED;
 		}
@@ -540,9 +485,6 @@ void ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 	};
 
 	qdf_spin_unlock_bh(&pool->flow_pool_lock);
-
-	if (unlikely(distribute_desc))
-		ol_tx_distribute_descs_to_deficient_pools_from_global_pool();
 
 }
 #endif
@@ -796,9 +738,11 @@ void ol_tx_desc_frame_list_free(struct ol_txrx_pdev_t *pdev,
 		 * DMA mapped address. In such case, there's no need for WLAN
 		 * driver to DMA unmap the skb.
 		 */
-		if ((qdf_nbuf_get_users(msdu) <= 1) &&
-				!qdf_nbuf_ipa_owned_get(msdu))
-			qdf_nbuf_unmap(pdev->osdev, msdu, QDF_DMA_TO_DEVICE);
+		if (qdf_nbuf_get_users(msdu) <= 1) {
+			if (!qdf_nbuf_ipa_owned_get(msdu))
+				qdf_nbuf_unmap(pdev->osdev, msdu,
+					       QDF_DMA_TO_DEVICE);
+		}
 
 		/* free the tx desc */
 		ol_tx_desc_free(pdev, tx_desc);
@@ -822,7 +766,6 @@ void ol_tx_desc_frame_free_nonstd(struct ol_txrx_pdev_t *pdev,
 	OL_TX_RESTORE_HDR(tx_desc, (tx_desc->netbuf));
 #endif
 	if (tx_desc->pkt_type == OL_TX_FRM_NO_FREE) {
-
 		/* free the tx desc but don't unmap or free the frame */
 		if (pdev->tx_data_callback.func) {
 			qdf_nbuf_set_next(tx_desc->netbuf, NULL);
@@ -868,12 +811,15 @@ void ol_tx_desc_frame_free_nonstd(struct ol_txrx_pdev_t *pdev,
 		 *  provided to the txrx layer.
 		 *  no need to check it a 2nd time.
 		 */
-		ota_ack_cb = pdev->tx_mgmt_cb.ota_ack_cb;
+		ota_ack_cb = pdev->tx_mgmt.callbacks[mgmt_type].ota_ack_cb;
 		if (ota_ack_cb) {
 			void *ctxt;
-			ctxt = pdev->tx_mgmt_cb.ctxt;
+
+			ctxt = pdev->tx_mgmt.callbacks[mgmt_type].ctxt;
 			ota_ack_cb(ctxt, tx_desc->netbuf, had_error);
 		}
+		/* free the netbuf */
+		qdf_nbuf_free(tx_desc->netbuf);
 	} else if (had_error == htt_tx_status_download_fail) {
 		/* Failed to send to target */
 

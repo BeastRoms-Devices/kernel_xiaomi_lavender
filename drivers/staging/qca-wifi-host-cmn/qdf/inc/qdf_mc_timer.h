@@ -72,6 +72,7 @@ typedef struct qdf_mc_timer_s {
 	qdf_mutex_t lock;
 	QDF_TIMER_TYPE type;
 	QDF_TIMER_STATE state;
+	uint32_t cookie;
 } qdf_mc_timer_t;
 
 
@@ -254,7 +255,7 @@ unsigned long qdf_mc_timer_get_system_time(void);
 /**
  * qdf_get_monotonic_boottime_ns() - Get kernel boottime in ns
  *
- * Return: kernel boottime in nano sec (includes time spent in suspend)
+ * Return: kernel boottime in nano sec
  */
 s64 qdf_get_monotonic_boottime_ns(void);
 
@@ -267,13 +268,6 @@ s64 qdf_get_monotonic_boottime_ns(void);
  * Return: none
  */
 void qdf_timer_module_init(void);
-
-/**
- * qdf_get_time_of_the_day_ms() - get time of the day in millisec
- *
- * Return: time of the day in ms
- */
-qdf_time_t qdf_get_time_of_the_day_ms(void);
 
 /**
  * qdf_timer_module_deinit() - Deinitializes a QDF timer module.
@@ -293,21 +287,4 @@ void qdf_timer_module_deinit(void);
  * Return: None
  */
 void qdf_get_time_of_the_day_in_hr_min_sec_usec(char *tbuf, int len);
-void qdf_register_mc_timer_callback(void (*callback) (unsigned long data));
-
-/**
- * qdf_timer_set_multiplier() - set the global QDF timer scalar value
- * @multiplier: the scalar value to apply
- *
- * Return: None
- */
-void qdf_timer_set_multiplier(uint32_t multiplier);
-
-/**
- * qdf_timer_get_multiplier() - get the global QDF timer scalar value
- *
- * Return: the global QDF timer scalar value
- */
-uint32_t qdf_timer_get_multiplier(void);
-
 #endif /* __QDF_MC_TIMER_H */

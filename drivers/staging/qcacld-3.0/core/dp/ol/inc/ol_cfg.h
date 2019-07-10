@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -23,13 +23,9 @@
 #include <cdp_txrx_cmn.h>       /* ol_pdev_handle */
 #include <cds_ieee80211_common.h>   /* ieee80211_qosframe_htc_addr4 */
 #include <enet.h>               /* LLC_SNAP_HDR_LEN */
-#if defined(CONFIG_HL_SUPPORT)
-#include "wlan_tgt_def_config_hl.h"
-#else
-#include "wlan_tgt_def_config.h"
-#endif
+#include "target_if_def_config.h"
 #include "ol_txrx_ctrl_api.h"   /* txrx_pdev_cfg_param_t */
-#include <cdp_txrx_handle.h>
+
 
 /**
  * @brief format of data frames delivered to/from the WLAN driver by/to the OS
@@ -92,38 +88,8 @@ struct txrx_pdev_cfg_t {
 
 	struct ol_tx_sched_wrr_ac_specs_t ac_specs[TX_WMM_AC_NUM];
 
-	/* Flag to indicate whether new htt format is supported */
-	bool new_htt_format_enabled;
+	uint8_t pktcapture_mode;
 };
-
-/**
- * ol_tx_set_flow_control_parameters() - set flow control parameters
- * @cfg_ctx: cfg context
- * @cfg_param: cfg parameters
- *
- * Return: none
- */
-#ifdef QCA_LL_TX_FLOW_CONTROL_V2
-void ol_tx_set_flow_control_parameters(struct cdp_cfg *cfg_ctx,
-				       struct txrx_pdev_cfg_param_t *cfg_param);
-#else
-static inline
-void ol_tx_set_flow_control_parameters(struct cdp_cfg *cfg_ctx,
-				       struct txrx_pdev_cfg_param_t *cfg_param)
-{
-}
-#endif
-
-/**
- * ol_pdev_cfg_attach - setup configuration parameters
- * @osdev: OS handle needed as an argument for some OS primitives
- * @cfg_param: configuration parameters
- *
- * Allocation configuration context that will be used across data path
- *
- * Return: the control device object
- */
-struct cdp_cfg *ol_pdev_cfg_attach(qdf_device_t osdev, void *pcfg_param);
 
 /**
  * @brief Specify whether the system is high-latency or low-latency.
@@ -138,7 +104,7 @@ struct cdp_cfg *ol_pdev_cfg_attach(qdf_device_t osdev, void *pcfg_param);
  * @param pdev - handle to the physical device
  * @return 1 -> high-latency -OR- 0 -> low-latency
  */
-int ol_cfg_is_high_latency(struct cdp_cfg *cfg_pdev);
+int ol_cfg_is_high_latency(ol_pdev_handle pdev);
 
 /**
  * @brief Specify the range of peer IDs.
@@ -151,7 +117,7 @@ int ol_cfg_is_high_latency(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return maximum peer ID
  */
-int ol_cfg_max_peer_id(struct cdp_cfg *cfg_pdev);
+int ol_cfg_max_peer_id(ol_pdev_handle pdev);
 
 /**
  * @brief Specify the max number of virtual devices within a physical device.
@@ -161,7 +127,7 @@ int ol_cfg_max_peer_id(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return maximum number of virtual devices
  */
-int ol_cfg_max_vdevs(struct cdp_cfg *cfg_pdev);
+int ol_cfg_max_vdevs(ol_pdev_handle pdev);
 
 /**
  * @brief Check whether host-side rx PN check is enabled or disabled.
@@ -175,7 +141,7 @@ int ol_cfg_max_vdevs(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return 1 -> host performs rx PN check -OR- 0 -> no host-side rx PN check
  */
-int ol_cfg_rx_pn_check(struct cdp_cfg *cfg_pdev);
+int ol_cfg_rx_pn_check(ol_pdev_handle pdev);
 
 /**
  * @brief Check whether host-side rx forwarding is enabled or disabled.
@@ -191,29 +157,7 @@ int ol_cfg_rx_pn_check(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return 1 -> host does rx->tx forward -OR- 0 -> no host-side rx->tx forward
  */
-int ol_cfg_rx_fwd_check(struct cdp_cfg *cfg_pdev);
-
-/**
- * ol_set_cfg_rx_fwd_disabled - set rx fwd disable/enable
- *
- * @pdev - handle to the physical device
- * @disable_rx_fwd 1 -> no rx->tx forward -> rx->tx forward
- *
- * Choose whether to forward rx frames to tx (where applicable) within the
- * WLAN driver, or to leave all forwarding up to the operating system.
- * Currently only intra-bss fwd is supported.
- *
- */
-void ol_set_cfg_rx_fwd_disabled(struct cdp_cfg *ppdev, uint8_t disable_rx_fwd);
-
-/**
- * ol_set_cfg_packet_log_enabled - Set packet log config in HTT
- * config based on CFG ini configuration
- *
- * @pdev - handle to the physical device
- * @val - 0 - disable, 1 - enable
- */
-void ol_set_cfg_packet_log_enabled(struct cdp_cfg *ppdev, uint8_t val);
+int ol_cfg_rx_fwd_check(ol_pdev_handle pdev);
 
 /**
  * @brief Check whether rx forwarding is enabled or disabled.
@@ -224,7 +168,7 @@ void ol_set_cfg_packet_log_enabled(struct cdp_cfg *ppdev, uint8_t val);
  * @param pdev - handle to the physical device
  * @return 1 -> no rx->tx forward -OR- 0 -> rx->tx forward (in host or target)
  */
-int ol_cfg_rx_fwd_disabled(struct cdp_cfg *cfg_pdev);
+int ol_cfg_rx_fwd_disabled(ol_pdev_handle pdev);
 
 /**
  * @brief Check whether to perform inter-BSS or intra-BSS rx->tx forwarding.
@@ -240,7 +184,7 @@ int ol_cfg_rx_fwd_disabled(struct cdp_cfg *cfg_pdev);
  *      -OR-
  *      0 -> forward only within a vdev
  */
-int ol_cfg_rx_fwd_inter_bss(struct cdp_cfg *cfg_pdev);
+int ol_cfg_rx_fwd_inter_bss(ol_pdev_handle pdev);
 
 /**
  * @brief Specify data frame format used by the OS.
@@ -251,7 +195,7 @@ int ol_cfg_rx_fwd_inter_bss(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return enumerated data frame format
  */
-enum wlan_frm_fmt ol_cfg_frame_type(struct cdp_cfg *cfg_pdev);
+enum wlan_frm_fmt ol_cfg_frame_type(ol_pdev_handle pdev);
 
 /**
  * @brief Specify the peak throughput.
@@ -266,7 +210,7 @@ enum wlan_frm_fmt ol_cfg_frame_type(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return maximum supported throughput in Mbps (not MBps)
  */
-int ol_cfg_max_thruput_mbps(struct cdp_cfg *cfg_pdev);
+int ol_cfg_max_thruput_mbps(ol_pdev_handle pdev);
 
 /**
  * @brief Specify the maximum number of fragments per tx network buffer.
@@ -284,7 +228,7 @@ int ol_cfg_max_thruput_mbps(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return maximum number of fragments that can occur in a regular tx frame
  */
-int ol_cfg_netbuf_frags_max(struct cdp_cfg *cfg_pdev);
+int ol_cfg_netbuf_frags_max(ol_pdev_handle pdev);
 
 /**
  * @brief For HL systems, specify when to free tx frames.
@@ -311,8 +255,8 @@ int ol_cfg_netbuf_frags_max(struct cdp_cfg *cfg_pdev);
  *      -OR-
  *      1 -> free the tx frame as soon as the download completes
  */
-int ol_cfg_tx_free_at_download(struct cdp_cfg *cfg_pdev);
-void ol_cfg_set_tx_free_at_download(struct cdp_cfg *cfg_pdev);
+int ol_cfg_tx_free_at_download(ol_pdev_handle pdev);
+void ol_cfg_set_tx_free_at_download(ol_pdev_handle pdev);
 
 /**
  * @brief Low water mark for target tx credit.
@@ -321,8 +265,8 @@ void ol_cfg_set_tx_free_at_download(struct cdp_cfg *cfg_pdev);
  */
 #define OL_CFG_NUM_MSDU_REAP 512
 #define ol_cfg_tx_credit_lwm(pdev)					       \
-	((CFG_TGT_NUM_MSDU_DESC >  OL_CFG_NUM_MSDU_REAP) ?		       \
-	 (CFG_TGT_NUM_MSDU_DESC -  OL_CFG_NUM_MSDU_REAP) : 0)
+	((TGT_NUM_MSDU_DESC >  OL_CFG_NUM_MSDU_REAP) ?		       \
+	 (TGT_NUM_MSDU_DESC -  OL_CFG_NUM_MSDU_REAP) : 0)
 
 /**
  * @brief In a HL system, specify the target initial credit count.
@@ -340,7 +284,7 @@ void ol_cfg_set_tx_free_at_download(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return the number of tx buffers available in a HL target
  */
-uint16_t ol_cfg_target_tx_credit(struct cdp_cfg *cfg_pdev);
+uint16_t ol_cfg_target_tx_credit(ol_pdev_handle pdev);
 
 /**
  * @brief Specify the LL tx MSDU header download size.
@@ -361,7 +305,7 @@ uint16_t ol_cfg_target_tx_credit(struct cdp_cfg *cfg_pdev);
  * @return the number of bytes beyond the 802.3 or native WiFi header to
  *      download to the target for tx classification
  */
-int ol_cfg_tx_download_size(struct cdp_cfg *cfg_pdev);
+int ol_cfg_tx_download_size(ol_pdev_handle pdev);
 
 /**
  * brief Specify where defrag timeout and duplicate detection is handled
@@ -379,7 +323,7 @@ int ol_cfg_tx_download_size(struct cdp_cfg *cfg_pdev);
  *  1 -> host is responsible non-aggregate duplicate detection and
  *          timing out stale fragments.
  */
-int ol_cfg_rx_host_defrag_timeout_duplicate_check(struct cdp_cfg *cfg_pdev);
+int ol_cfg_rx_host_defrag_timeout_duplicate_check(ol_pdev_handle pdev);
 
 /**
  * brief Query for the period in ms used for throttling for
@@ -395,7 +339,7 @@ int ol_cfg_rx_host_defrag_timeout_duplicate_check(struct cdp_cfg *cfg_pdev);
  * @param pdev - handle to the physical device
  * @return the total throttle period in ms
  */
-int ol_cfg_throttle_period_ms(struct cdp_cfg *cfg_pdev);
+int ol_cfg_throttle_period_ms(ol_pdev_handle pdev);
 
 /**
  * brief Query for the duty cycle in percentage used for throttling for
@@ -405,7 +349,7 @@ int ol_cfg_throttle_period_ms(struct cdp_cfg *cfg_pdev);
  * @param level - duty cycle level
  * @return the duty cycle level in percentage
  */
-int ol_cfg_throttle_duty_cycle_level(struct cdp_cfg *cfg_pdev, int level);
+int ol_cfg_throttle_duty_cycle_level(ol_pdev_handle pdev, int level);
 
 /**
  * brief Check whether full reorder offload is
@@ -418,25 +362,25 @@ int ol_cfg_throttle_duty_cycle_level(struct cdp_cfg *cfg_pdev, int level);
  * @param pdev - handle to the physical device
  * @return 1 - enable, 0 - disable
  */
-int ol_cfg_is_full_reorder_offload(struct cdp_cfg *cfg_pdev);
-
-int ol_cfg_is_rx_thread_enabled(struct cdp_cfg *cfg_pdev);
+int ol_cfg_is_full_reorder_offload(ol_pdev_handle pdev);
 
 #ifdef WLAN_FEATURE_TSF_PLUS
-void ol_set_cfg_ptp_rx_opt_enabled(struct cdp_cfg *cfg_pdev, u_int8_t val);
-u_int8_t ol_cfg_is_ptp_rx_opt_enabled(struct cdp_cfg *cfg_pdev);
+void ol_set_cfg_ptp_rx_opt_enabled(ol_pdev_handle pdev, u_int8_t val);
+u_int8_t ol_cfg_is_ptp_rx_opt_enabled(ol_pdev_handle pdev);
 #else
 static inline void
-ol_set_cfg_ptp_rx_opt_enabled(struct cdp_cfg *cfg_pdev, u_int8_t val)
+ol_set_cfg_ptp_rx_opt_enabled(ol_pdev_handle pdev, u_int8_t val)
 {
 }
 
 static inline u_int8_t
-ol_cfg_is_ptp_rx_opt_enabled(struct cdp_cfg *cfg_pdev)
+ol_cfg_is_ptp_rx_opt_enabled(ol_pdev_handle pdev)
 {
 	return 0;
 }
 #endif
+
+int ol_cfg_is_rx_thread_enabled(ol_pdev_handle pdev);
 
 /**
  * ol_cfg_is_ip_tcp_udp_checksum_offload_enabled() - return
@@ -446,21 +390,21 @@ ol_cfg_is_ptp_rx_opt_enabled(struct cdp_cfg *cfg_pdev)
  * Return: 1 - enable, 0 - disable
  */
 static inline
-int ol_cfg_is_ip_tcp_udp_checksum_offload_enabled(struct cdp_cfg *cfg_pdev)
+int ol_cfg_is_ip_tcp_udp_checksum_offload_enabled(ol_pdev_handle pdev)
 {
-	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)cfg_pdev;
+	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
 
 	return cfg->ip_tcp_udp_checksum_offload;
 }
 
 
 #ifdef QCA_LL_TX_FLOW_CONTROL_V2
-int ol_cfg_get_tx_flow_stop_queue_th(struct cdp_cfg *cfg_pdev);
+int ol_cfg_get_tx_flow_stop_queue_th(ol_pdev_handle pdev);
 
-int ol_cfg_get_tx_flow_start_queue_offset(struct cdp_cfg *cfg_pdev);
+int ol_cfg_get_tx_flow_start_queue_offset(ol_pdev_handle pdev);
 #endif
 
-bool ol_cfg_is_ce_classify_enabled(struct cdp_cfg *cfg_pdev);
+bool ol_cfg_is_ce_classify_enabled(ol_pdev_handle pdev);
 
 enum wlan_target_fmt_translation_caps {
 	wlan_frm_tran_cap_raw = 0x01,
@@ -478,7 +422,7 @@ enum wlan_target_fmt_translation_caps {
  *
  * @param pdev - handle to the physical device
  */
-static inline int ol_cfg_sw_encap_hdr_max_size(struct cdp_cfg *cfg_pdev)
+static inline int ol_cfg_sw_encap_hdr_max_size(ol_pdev_handle pdev)
 {
 	/*
 	 *  24 byte basic 802.11 header
@@ -490,13 +434,13 @@ static inline int ol_cfg_sw_encap_hdr_max_size(struct cdp_cfg *cfg_pdev)
 	return sizeof(struct ieee80211_qosframe_htc_addr4) + LLC_SNAP_HDR_LEN;
 }
 
-static inline uint8_t ol_cfg_tx_encap(struct cdp_cfg *cfg_pdev)
+static inline uint8_t ol_cfg_tx_encap(ol_pdev_handle pdev)
 {
 	/* tx encap done in HW */
 	return 0;
 }
 
-static inline int ol_cfg_host_addba(struct cdp_cfg *cfg_pdev)
+static inline int ol_cfg_host_addba(ol_pdev_handle pdev)
 {
 	/*
 	 * ADDBA negotiation is handled by the target FW for Peregrine + Rome.
@@ -509,7 +453,7 @@ static inline int ol_cfg_host_addba(struct cdp_cfg *cfg_pdev)
  *
  * @param pdev - handle to the physical device
  */
-static inline int ol_cfg_addba_retry(struct cdp_cfg *cfg_pdev)
+static inline int ol_cfg_addba_retry(ol_pdev_handle pdev)
 {
 	return 0;               /* disabled for now */
 }
@@ -517,7 +461,7 @@ static inline int ol_cfg_addba_retry(struct cdp_cfg *cfg_pdev)
 /**
  * @brief How many frames to hold in a paused vdev's tx queue in LL systems
  */
-static inline int ol_tx_cfg_max_tx_queue_depth_ll(struct cdp_cfg *cfg_pdev)
+static inline int ol_tx_cfg_max_tx_queue_depth_ll(ol_pdev_handle pdev)
 {
 	/*
 	 * Store up to 1500 frames for a paused vdev.
@@ -538,7 +482,7 @@ static inline int ol_tx_cfg_max_tx_queue_depth_ll(struct cdp_cfg *cfg_pdev)
 /**
  * @brief Get packet log config from HTT config
  */
-uint8_t ol_cfg_is_packet_log_enabled(struct cdp_cfg *cfg_pdev);
+uint8_t ol_cfg_is_packet_log_enabled(ol_pdev_handle pdev);
 
 #ifdef IPA_OFFLOAD
 /**
@@ -549,7 +493,7 @@ uint8_t ol_cfg_is_packet_log_enabled(struct cdp_cfg *cfg_pdev);
  *
  * @param pdev - handle to the physical device
  */
-unsigned int ol_cfg_ipa_uc_offload_enabled(struct cdp_cfg *cfg_pdev);
+unsigned int ol_cfg_ipa_uc_offload_enabled(ol_pdev_handle pdev);
 /**
  * @brief IPA micro controller data path TX buffer size
  * @detail
@@ -559,7 +503,7 @@ unsigned int ol_cfg_ipa_uc_offload_enabled(struct cdp_cfg *cfg_pdev);
  *
  * @param pdev - handle to the physical device
  */
-unsigned int ol_cfg_ipa_uc_tx_buf_size(struct cdp_cfg *cfg_pdev);
+unsigned int ol_cfg_ipa_uc_tx_buf_size(ol_pdev_handle pdev);
 /**
  * @brief IPA micro controller data path TX buffer size
  * @detail
@@ -568,7 +512,7 @@ unsigned int ol_cfg_ipa_uc_tx_buf_size(struct cdp_cfg *cfg_pdev);
  *
  * @param pdev - handle to the physical device
  */
-unsigned int ol_cfg_ipa_uc_tx_max_buf_cnt(struct cdp_cfg *cfg_pdev);
+unsigned int ol_cfg_ipa_uc_tx_max_buf_cnt(ol_pdev_handle pdev);
 /**
  * @brief IPA micro controller data path TX buffer size
  * @detail
@@ -578,47 +522,46 @@ unsigned int ol_cfg_ipa_uc_tx_max_buf_cnt(struct cdp_cfg *cfg_pdev);
  *
  * @param pdev - handle to the physical device
  */
-unsigned int ol_cfg_ipa_uc_rx_ind_ring_size(struct cdp_cfg *cfg_pdev);
+unsigned int ol_cfg_ipa_uc_rx_ind_ring_size(ol_pdev_handle pdev);
 /**
  * @brief IPA micro controller data path TX buffer size
  * @param pdev - handle to the physical device
  */
-unsigned int ol_cfg_ipa_uc_tx_partition_base(struct cdp_cfg *cfg_pdev);
-void ol_cfg_set_ipa_uc_tx_partition_base(struct cdp_cfg *cfg_pdev,
-					 uint32_t value);
+unsigned int ol_cfg_ipa_uc_tx_partition_base(ol_pdev_handle pdev);
+void ol_cfg_set_ipa_uc_tx_partition_base(ol_pdev_handle pdev, uint32_t value);
 #else
 static inline unsigned int ol_cfg_ipa_uc_offload_enabled(
-	struct cdp_cfg *cfg_pdev)
+	ol_pdev_handle pdev)
 {
 	return 0;
 }
 
 static inline unsigned int ol_cfg_ipa_uc_tx_buf_size(
-	struct cdp_cfg *cfg_pdev)
+	ol_pdev_handle pdev)
 {
 	return 0;
 }
 
 static inline unsigned int ol_cfg_ipa_uc_tx_max_buf_cnt(
-	struct cdp_cfg *cfg_pdev)
+	ol_pdev_handle pdev)
 {
 	return 0;
 }
 
 static inline unsigned int ol_cfg_ipa_uc_rx_ind_ring_size(
-	struct cdp_cfg *cfg_pdev)
+	ol_pdev_handle pdev)
 {
 	return 0;
 }
 
 static inline unsigned int ol_cfg_ipa_uc_tx_partition_base(
-	struct cdp_cfg *cfg_pdev)
+	ol_pdev_handle pdev)
 {
 	return 0;
 }
 
 static inline void ol_cfg_set_ipa_uc_tx_partition_base(
-	void *cfg_pdev, uint32_t value)
+	ol_pdev_handle pdev, uint32_t value)
 {
 }
 #endif /* IPA_OFFLOAD */
@@ -632,10 +575,9 @@ static inline void ol_cfg_set_ipa_uc_tx_partition_base(
  *
  * Return: None
  */
-static inline void ol_set_cfg_flow_steering(struct cdp_cfg *cfg_pdev,
-				uint8_t val)
+static inline void ol_set_cfg_flow_steering(ol_pdev_handle pdev, uint8_t val)
 {
-	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)cfg_pdev;
+	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
 
 	cfg->flow_steering_enabled = val;
 }
@@ -647,86 +589,24 @@ static inline void ol_set_cfg_flow_steering(struct cdp_cfg *cfg_pdev,
  *
  * Return: value of configured flow steering value.
  */
-static inline uint8_t ol_cfg_is_flow_steering_enabled(struct cdp_cfg *cfg_pdev)
+static inline uint8_t ol_cfg_is_flow_steering_enabled(ol_pdev_handle pdev)
 {
-	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)cfg_pdev;
+	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
 
 	return cfg->flow_steering_enabled;
 }
 
-/**
- * ol_set_cfg_new_htt_format - Set whether FW supports new htt format
- *
- * @pdev - handle to the physical device
- * @val - true - supported, false - not supported
- *
- * Return: None
- */
-static inline void
-ol_set_cfg_new_htt_format(struct cdp_cfg *cfg_pdev, bool val)
-{
-	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)cfg_pdev;
+int ol_cfg_get_wrr_skip_weight(ol_pdev_handle pdev, int ac);
 
-	cfg->new_htt_format_enabled = val;
-}
+uint32_t ol_cfg_get_credit_threshold(ol_pdev_handle pdev, int ac);
 
-/**
- * ol_cfg_is_htt_new_format_enabled - Return whether FW supports new htt format
- *
- * @pdev - handle to the physical device
- *
- * Return: value of configured htt_new_format
- */
-static inline bool
-ol_cfg_is_htt_new_format_enabled(struct cdp_cfg *cfg_pdev)
-{
-	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)cfg_pdev;
+uint16_t ol_cfg_get_send_limit(ol_pdev_handle pdev, int ac);
 
-	return cfg->new_htt_format_enabled;
-}
+int ol_cfg_get_credit_reserve(ol_pdev_handle pdev, int ac);
 
-/**
- * ol_cfg_get_wrr_skip_weight() - brief Query for the param of wrr_skip_weight
- * @pdev: handle to the physical device.
- * @ac: access control, it will be BE, BK, VI, VO
- *
- * Return: wrr_skip_weight for specified ac.
- */
-int ol_cfg_get_wrr_skip_weight(struct cdp_cfg *pdev, int ac);
+int ol_cfg_get_discard_weight(ol_pdev_handle pdev, int ac);
 
-/**
- * ol_cfg_get_credit_threshold() - Query for the param of credit_threshold
- * @pdev: handle to the physical device.
- * @ac: access control, it will be BE, BK, VI, VO
- *
- * Return: credit_threshold for specified ac.
- */
-uint32_t ol_cfg_get_credit_threshold(struct cdp_cfg *pdev, int ac);
+int ol_cfg_pktcapture_mode(ol_pdev_handle pdev);
 
-/**
- * ol_cfg_get_send_limit() - Query for the param of send_limit
- * @pdev: handle to the physical device.
- * @ac: access control, it will be BE, BK, VI, VO
- *
- * Return: send_limit for specified ac.
- */
-uint16_t ol_cfg_get_send_limit(struct cdp_cfg *pdev, int ac);
-
-/**
- * ol_cfg_get_credit_reserve() - Query for the param of credit_reserve
- * @pdev: handle to the physical device.
- * @ac: access control, it will be BE, BK, VI, VO
- *
- * Return: credit_reserve for specified ac.
- */
-int ol_cfg_get_credit_reserve(struct cdp_cfg *pdev, int ac);
-
-/**
- * ol_cfg_get_discard_weight() - Query for the param of discard_weight
- * @pdev: handle to the physical device.
- * @ac: access control, it will be BE, BK, VI, VO
- *
- * Return: discard_weight for specified ac.
- */
-int ol_cfg_get_discard_weight(struct cdp_cfg *pdev, int ac);
+void ol_cfg_set_pktcapture_mode(ol_pdev_handle pdev, int val);
 #endif /* _OL_CFG__H_ */
